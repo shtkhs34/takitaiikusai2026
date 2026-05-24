@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 滝学園体育祭サイト</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; background: #f4f7f6; color: #333; }
+        /* 上部メニュー */
+        .nav { 
+            display: flex; 
+            justify-content: center; 
+            gap: 10px; 
+            padding: 15px; 
+            background: #1a365d; 
+            position: sticky; 
+            top: 0; 
+            z-index: 100; 
+        }
+        .nav button { 
+            padding: 10px 15px; 
+            border: none; 
+            border-radius: 5px; 
+            background: white; 
+            cursor: pointer; 
+            font-weight: bold; 
+        }
+        /* 表示・非表示の切り替え */
+        .container { padding: 20px; max-width: 900px; margin: auto; }
+        .page { display: none; } 
+        .active { display: block; } 
+        /* テーブルのデザイン */
+        h2 { border-left: 5px solid #1a365d; padding-left: 10px; font-size: 1.2rem; margin-top: 30px; }
+        table { width: 100%; border-collapse: collapse; background: white; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px 5px; text-align: center; font-size: 14px; }
+        th { background: #edf2f7; }
+        /* PDFリンクボタン */
+        .pdf-button { 
+            display: block; 
+            text-align: center; 
+            background: #d93025; 
+            color: white; 
+            padding: 20px; 
+            text-decoration: none; 
+            border-radius: 10px; 
+            font-weight: bold; 
+        }
+    </style>
+</head>
+<body>
+
+<div class="nav">
+    <button onclick="showPage('scores')">得点速報</button>
+    <button onclick="showPage('schedule')">予定表</button>
+    <button onclick="showPage('players')">選手一覧</button>
+</div>
+
+<div class="container">
+    <div id="page-scores" class="page active">
+        <h1>得点速報</h1>
+        <div id="score-content">データを読み込み中...</div>
+    </div>
+
+    <div id="page-schedule" class="page">
+        <h1>タイムスケジュール</h1>
+        <div id="schedule-content">データを読み込み中...</div>
+    </div>
+
+    <div id="page-players" class="page">
+        <h1>出場選手一覧</h1>
+        <p>名簿は以下のPDFファイルでご確認いただけます。</p>
+        <a href="★ここにPDFのリンクを貼る★" target="_blank" class="pdf-button">
+            PDFで選手一覧を開く
+        </a>
+    </div>
+</div>
+
+<script>
+    // ★ここにあなたのGASのURLを貼り付けてください
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzJoFxInf1LoMarr7gWZk7yLuPi1DbbEj_7pD9SapArRRa_j0q1LiRedWn2pGM1Ef71gg/exec';
+
+    // ページを切り替える命令
+    function showPage(pageId) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('page-' + pageId).classList.add('active');
+    }
+
+    // 表を作る命令
+    // 表を作る命令（時刻バグ対策版）
+    function createTable(dataArray) {
+        if (!dataArray || dataArray.length === 0) return "<p>データがありません</p>";
+        let html = '<div style="overflow-x:auto;"><table>';
+        dataArray.forEach((row, idx) => {
+            html += "<tr>";
+            row.forEach(cell => {
+                // 時刻データが「日付形式」で送られてきた場合の対策
+                let displayValue = cell;
+                if (cell instanceof Date || (typeof cell === 'string' && cell.includes('T') && cell.includes('Z'))) {
+                    const d = new Date(cell);
+                    // 時と分を取り出して「HH:mm」形式にする
+                    const hours = d.getHours().toString().padStart(2, '0');
+                    const minutes = d.getMinutes().toString().padStart(2, '0');
+                    displayValue = `${hours}:${minutes}`;
+                }
+
+                if (idx === 0) html += `<th>${displayValue || ''}</th>`;
+                else html += `<td>${displayValue === undefined ? '' : displayValue}</td>`;
+            });
+            html += "</tr>";
+        });
+        html += "</table></div>";
+        return html;
+    }
+
+    // データを読み込む命令
+    async function loadData() {
+        try {
+            const response = await fetch(GAS_URL);
+            const allData = await response.json();
+            
+            let scoreHtml = "";
+            let scheduleHtml = "";
+
+            // スプレッドシート内の各シートを仕分け
+            for (let sheetName in allData) {
+                if (sheetName.includes("予定表")) {
+                    // 「予定表」という名前のシートは予定表ページへ
+                    scheduleHtml += createTable(allData[sheetName]);
+                } else {
+                    // それ以外のシート（得点など）は得点ページへ
+                    scoreHtml += `<h2>${sheetName}</h2>` + createTable(allData[sheetName]);
+                }
+            }
+
+            document.getElementById('score-content').innerHTML = scoreHtml;
+            document.getElementById('schedule-content').innerHTML = scheduleHtml || "<p>予定表シートが見つかりません</p>";
+
+        } catch (e) {
+            document.getElementById('score-content').innerHTML = "データの取得に失敗しました。";
+            document.getElementById('schedule-content').innerHTML = "データの取得に失敗しました。";
+        }
+    }
+
+    // 初回読み込み
+    loadData();
+    // 2分ごとに自動更新（当日、得点が動くのを反映するため）
+    setInterval(loadData, 120000);
+</script>
+
+</body>
+</html>
