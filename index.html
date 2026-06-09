@@ -25,15 +25,36 @@
             cursor: pointer; 
             font-weight: bold; 
         }
-        /* 表示・非表示の切り替え */
         .container { padding: 20px; max-width: 900px; margin: auto; }
         .page { display: none; } 
         .active { display: block; } 
+        
         /* テーブルのデザイン */
         h2 { border-left: 5px solid #1a365d; padding-left: 10px; font-size: 1.2rem; margin-top: 30px; }
         table { width: 100%; border-collapse: collapse; background: white; margin-bottom: 20px; }
         th, td { border: 1px solid #ddd; padding: 10px 5px; text-align: center; font-size: 14px; }
-        th { background: #edf2f7; }
+        th.default-bg { background: #edf2f7; color: #4a5568; }
+        
+        /* お知らせ（掲示板）のデザイン */
+        .info-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border-left: 5px solid #d93025; /* 本部からの連絡っぽく赤色の線 */
+        }
+        .info-time {
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .info-text {
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
         /* PDFリンクボタン */
         .pdf-button { 
             display: block; 
@@ -50,13 +71,19 @@
 <body>
 
 <div class="nav">
+    <button onclick="showPage('info')">📢お知らせ</button>
     <button onclick="showPage('scores')">得点速報</button>
     <button onclick="showPage('schedule')">予定表</button>
     <button onclick="showPage('players')">選手一覧</button>
 </div>
 
 <div class="container">
-    <div id="page-scores" class="page active">
+    <div id="page-info" class="page active">
+        <h1>本部掲示板</h1>
+        <div id="info-content">お知らせを読み込み中...</div>
+    </div>
+
+    <div id="page-scores" class="page">
         <h1>得点速報</h1>
         <div id="score-content">データを読み込み中...</div>
     </div>
@@ -76,35 +103,68 @@
 </div>
 
 <script>
-    // ★ここにあなたのGASのURLを貼り付けてください
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzJoFxInf1LoMarr7gWZk7yLuPi1DbbEj_7pD9SapArRRa_j0q1LiRedWn2pGM1Ef71gg/exec';
+    const GAS_URL ='https://script.google.com/macros/s/AKfycbzJoFxInf1LoMarr7gWZk7yLuPi1DbbEj_7pD9SapArRRa_j0q1LiRedWn2pGM1Ef71gg/exec';
 
-    // ページを切り替える命令
+    // クラス名・軍団名に応じた色設定
+    function getColorStyle(cellText) {
+        const text = String(cellText).trim();
+        if (text === 'A') return { headerBg: '#eab308', color: '#fff', colBg: '#fef9c3' };
+        if (text === 'B') return { headerBg: '#f472b6', color: '#fff', colBg: '#fdf2f8' };
+        if (text === 'C') return { headerBg: '#a855f7', color: '#fff', colBg: '#f3e8ff' };
+        if (text === 'D') return { headerBg: '#f97316', color: '#fff', colBg: '#ffedd5' };
+        if (text === 'E') return { headerBg: '#22c55e', color: '#fff', colBg: '#dcfce7' };
+        if (text === 'F') return { headerBg: '#3b82f6', color: '#fff', colBg: '#dbeafe' };
+        if (text === 'G') return { headerBg: '#ef4444', color: '#fff', colBg: '#fee2e2' };
+        if (text === 'H') return { headerBg: '#06b6d4', color: '#fff', colBg: '#ecfeff' };
+        if (text === 'I') return { headerBg: '#0f172a', color: '#fff', colBg: '#f1f5f9' };
+
+        if (text.includes('赤組') || text.includes('ADG')) return { headerBg: '#dc2626', color: '#fff', colBg: '#fef2f2' };
+        if (text.includes('青組') || text.includes('BEH')) return { headerBg: '#2563eb', color: '#fff', colBg: '#eff6ff' };
+        if (text.includes('黄色組') || text.includes('CFI')) return { headerBg: '#ca8a04', color: '#fff', colBg: '#fefcbf' };
+        return null;
+    }
+
     function showPage(pageId) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.getElementById('page-' + pageId).classList.add('active');
     }
 
+    // 時刻バグ対策付きのフォーマット関数
+    function formatTime(cell) {
+        if (cell instanceof Date || (typeof cell === 'string' && cell.includes('T') && cell.includes('Z'))) {
+            const d = new Date(cell);
+            const hours = d.getHours().toString().padStart(2, '0');
+            const minutes = d.getMinutes().toString().padStart(2, '0');
+            return `${hours}:${minutes}`;
+        }
+        return cell || '';
+    }
+
     // 表を作る命令
-    // 表を作る命令（時刻バグ対策版）
     function createTable(dataArray) {
         if (!dataArray || dataArray.length === 0) return "<p>データがありません</p>";
+        const columnStyles = dataArray[0].map(cell => getColorStyle(cell));
         let html = '<div style="overflow-x:auto;"><table>';
-        dataArray.forEach((row, idx) => {
+        
+        dataArray.forEach((row, rowIdx) => {
             html += "<tr>";
-            row.forEach(cell => {
-                // 時刻データが「日付形式」で送られてきた場合の対策
-                let displayValue = cell;
-                if (cell instanceof Date || (typeof cell === 'string' && cell.includes('T') && cell.includes('Z'))) {
-                    const d = new Date(cell);
-                    // 時と分を取り出して「HH:mm」形式にする
-                    const hours = d.getHours().toString().padStart(2, '0');
-                    const minutes = d.getMinutes().toString().padStart(2, '0');
-                    displayValue = `${hours}:${minutes}`;
-                }
+            row.forEach((cell, colIdx) => {
+                let displayValue = formatTime(cell);
+                const currentStyle = columnStyles[colIdx];
 
-                if (idx === 0) html += `<th>${displayValue || ''}</th>`;
-                else html += `<td>${displayValue === undefined ? '' : displayValue}</td>`;
+                if (rowIdx === 0) {
+                    if (currentStyle) {
+                        html += `<th style="background: ${currentStyle.headerBg}; color: ${currentStyle.color};">${displayValue}</th>`;
+                    } else {
+                        html += `<th class="default-bg">${displayValue}</th>`;
+                    }
+                } else {
+                    if (currentStyle) {
+                        html += `<td style="background: ${currentStyle.colBg};">${displayValue === undefined ? '' : displayValue}</td>`;
+                    } else {
+                        html += `<td>${displayValue === undefined ? '' : displayValue}</td>`;
+                    }
+                }
             });
             html += "</tr>";
         });
@@ -112,7 +172,27 @@
         return html;
     }
 
-    // データを読み込む命令
+    // 掲示板（タイムライン）を作る命令
+    function createTimeline(dataArray) {
+        if (!dataArray || dataArray.length <= 1) return "<p>現在、新しいお知らせはありません。</p>";
+        
+        let html = "";
+        // 1行目は「時刻」「内容」の見出しなので、2行目以降を【新しい順（後ろから）】に表示
+        for (let i = dataArray.length - 1; i >= 1; i--) {
+            const time = formatTime(dataArray[i][0]);
+            const text = dataArray[i][1] || '';
+            
+            if (time || text) {
+                html += `
+                    <div class="info-card">
+                        <div class="info-time">🕒 ${time}</div>
+                        <div class="info-text">${text}</div>
+                    </div>`;
+            }
+        }
+        return html;
+    }
+
     async function loadData() {
         try {
             const response = await fetch(GAS_URL);
@@ -120,31 +200,30 @@
             
             let scoreHtml = "";
             let scheduleHtml = "";
+            let infoHtml = "";
 
-            // スプレッドシート内の各シートを仕分け
             for (let sheetName in allData) {
                 if (sheetName.includes("予定表")) {
-                    // 「予定表」という名前のシートは予定表ページへ
                     scheduleHtml += createTable(allData[sheetName]);
+                } else if (sheetName.includes("お知らせ")) {
+                    // お知らせシートはタイムライン形式で表示
+                    infoHtml += createTimeline(allData[sheetName]);
                 } else {
-                    // それ以外のシート（得点など）は得点ページへ
                     scoreHtml += `<h2>${sheetName}</h2>` + createTable(allData[sheetName]);
                 }
             }
 
             document.getElementById('score-content').innerHTML = scoreHtml;
             document.getElementById('schedule-content').innerHTML = scheduleHtml || "<p>予定表シートが見つかりません</p>";
+            document.getElementById('info-content').innerHTML = infoHtml || "<p>お知らせはありません</p>";
 
         } catch (e) {
             document.getElementById('score-content').innerHTML = "データの取得に失敗しました。";
-            document.getElementById('schedule-content').innerHTML = "データの取得に失敗しました。";
         }
     }
 
-    // 初回読み込み
     loadData();
-    // 2分ごとに自動更新（当日、得点が動くのを反映するため）
-    setInterval(loadData, 120000);
+    setInterval(loadData, 120000); // 2分ごとに最新情報へ自動更新
 </script>
 
 </body>
