@@ -42,29 +42,38 @@
             border-radius: 8px;
             margin-bottom: 15px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            border-left: 5px solid #d93025; /* 本部からの連絡っぽく赤色の線 */
+            border-left: 5px solid #d93025;
         }
-        .info-time {
-            font-size: 0.85rem;
-            color: #666;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        .info-text {
-            font-size: 1rem;
-            line-height: 1.5;
-        }
+        .info-time { font-size: 0.85rem; color: #666; font-weight: bold; margin-bottom: 5px; }
+        .info-text { font-size: 1rem; line-height: 1.5; }
 
-        /* PDFリンクボタン */
+        /* 📁 資料ページ専用のデザイン */
+        .pdf-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 20px;
+        }
         .pdf-button { 
-            display: block; 
-            text-align: center; 
-            background: #d93025; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #d93025; /* PDFっぽい赤色 */
             color: white; 
-            padding: 20px; 
+            padding: 18px; 
             text-decoration: none; 
-            border-radius: 10px; 
+            border-radius: 8px; 
             font-weight: bold; 
+            font-size: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: background 0.2s;
+        }
+        .pdf-button:hover {
+            background: #b8251b;
+        }
+        .pdf-icon {
+            margin-right: 10px;
+            font-size: 20px;
         }
     </style>
 </head>
@@ -74,8 +83,7 @@
     <button onclick="showPage('info')">📢お知らせ</button>
     <button onclick="showPage('scores')">得点速報</button>
     <button onclick="showPage('schedule')">予定表</button>
-    <button onclick="showPage('players')">選手一覧</button>
-</div>
+    <button onclick="showPage('docs')">📁資料</button> </div>
 
 <div class="container">
     <div id="page-info" class="page active">
@@ -93,17 +101,29 @@
         <div id="schedule-content">データを読み込み中...</div>
     </div>
 
-    <div id="page-players" class="page">
-        <h1>出場選手一覧</h1>
-        <p>名簿は以下のPDFファイルでご確認いただけます。</p>
-        <a href="★ここにPDFのリンクを貼る★" target="_blank" class="pdf-button">
-            PDFで選手一覧を開く
-        </a>
+    <div id="page-docs" class="page">
+        <h1>配布資料一覧</h1>
+        <p>確認したい資料のボタンを押すと、PDFファイルが開きます。</p>
+        
+        <div class="pdf-list">
+            <a href="https://drive.google.com/file/d/1wo-1HFejBIANPCu1DcvyUQ1rTFgucsh0/view?usp=sharing" target="_blank" class="pdf-button">
+                <span class="pdf-icon">📄</span> 競技ルール
+            </a>
+
+            <a href="★ここに2つ目のPDFリンクを貼る★" target="_blank" class="pdf-button">
+                <span class="pdf-icon">📄</span> 出場選手一覧（プログラム名簿）
+            </a>
+
+            <a href="★ここに3つ目のPDFリンクを貼る★" target="_blank" class="pdf-button">
+                <span class="pdf-icon">📄</span> 会場配置図・応援席案内
+            </a>
+        </div>
     </div>
 </div>
 
 <script>
-    const GAS_URL ='https://script.google.com/macros/s/AKfycbzJoFxInf1LoMarr7gWZk7yLuPi1DbbEj_7pD9SapArRRa_j0q1LiRedWn2pGM1Ef71gg/exec';
+    // ★ここにあなたのGASのURLを貼り付けてください
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzJoFxInf1LoMarr7gWZk7yLuPi1DbbEj_7pD9SapArRRa_j0q1LiRedWn2pGM1Ef71gg/exec';
 
     // クラス名・軍団名に応じた色設定
     function getColorStyle(cellText) {
@@ -129,7 +149,6 @@
         document.getElementById('page-' + pageId).classList.add('active');
     }
 
-    // 時刻バグ対策付きのフォーマット関数
     function formatTime(cell) {
         if (cell instanceof Date || (typeof cell === 'string' && cell.includes('T') && cell.includes('Z'))) {
             const d = new Date(cell);
@@ -140,7 +159,6 @@
         return cell || '';
     }
 
-    // 表を作る命令
     function createTable(dataArray) {
         if (!dataArray || dataArray.length === 0) return "<p>データがありません</p>";
         const columnStyles = dataArray[0].map(cell => getColorStyle(cell));
@@ -172,16 +190,12 @@
         return html;
     }
 
-    // 掲示板（タイムライン）を作る命令
     function createTimeline(dataArray) {
         if (!dataArray || dataArray.length <= 1) return "<p>現在、新しいお知らせはありません。</p>";
-        
         let html = "";
-        // 1行目は「時刻」「内容」の見出しなので、2行目以降を【新しい順（後ろから）】に表示
         for (let i = dataArray.length - 1; i >= 1; i--) {
             const time = formatTime(dataArray[i][0]);
             const text = dataArray[i][1] || '';
-            
             if (time || text) {
                 html += `
                     <div class="info-card">
@@ -206,7 +220,6 @@
                 if (sheetName.includes("予定表")) {
                     scheduleHtml += createTable(allData[sheetName]);
                 } else if (sheetName.includes("お知らせ")) {
-                    // お知らせシートはタイムライン形式で表示
                     infoHtml += createTimeline(allData[sheetName]);
                 } else {
                     scoreHtml += `<h2>${sheetName}</h2>` + createTable(allData[sheetName]);
@@ -223,7 +236,7 @@
     }
 
     loadData();
-    setInterval(loadData, 120000); // 2分ごとに最新情報へ自動更新
+    setInterval(loadData, 120000);
 </script>
 
 </body>
