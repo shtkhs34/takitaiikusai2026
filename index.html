@@ -25,15 +25,18 @@
             cursor: pointer; 
             font-weight: bold; 
         }
-        /* 表示・非表示の切り替え */
         .container { padding: 20px; max-width: 900px; margin: auto; }
         .page { display: none; } 
         .active { display: block; } 
-        /* テーブルのデザイン */
+        
+        /* テーブルの基本デザイン */
         h2 { border-left: 5px solid #1a365d; padding-left: 10px; font-size: 1.2rem; margin-top: 30px; }
         table { width: 100%; border-collapse: collapse; background: white; margin-bottom: 20px; }
         th, td { border: 1px solid #ddd; padding: 10px 5px; text-align: center; font-size: 14px; }
-        th { background: #edf2f7; }
+        
+        /* デフォルトのヘッダー色（種目名など、色指定がないセル用） */
+        th.default-bg { background: #edf2f7; color: #4a5568; }
+        
         /* PDFリンクボタン */
         .pdf-button { 
             display: block; 
@@ -76,35 +79,67 @@
 </div>
 
 <script>
-    // ★ここにあなたのGASのURLを貼り付けてください
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzJoFxInf1LoMarr7gWZk7yLuPi1DbbEj_7pD9SapArRRa_j0q1LiRedWn2pGM1Ef71gg/exec';
+    const GAS_URL = '★あなたのGASのURL★';
 
-    // ページを切り替える命令
+    // クラス名・軍団名に応じた背景色と文字色を決定する関数
+    function getHeaderStyle(cellText) {
+        const text = String(cellText).trim();
+        
+        // クラスの色設定
+        if (text === 'A') return { bg: '#fef08a', color: '#000' }; // 黄色
+        if (text === 'B') return { bg: '#fbcfe8', color: '#000' }; // ピンク
+        if (text === 'C') return { bg: '#e9d5ff', color: '#000' }; // 紫
+        if (text === 'D') return { bg: '#fed7aa', color: '#000' }; // オレンジ
+        if (text === 'E') return { bg: '#bbf7d0', color: '#000' }; // 緑
+        if (text === 'F') return { bg: '#bfdbfe', color: '#000' }; // 青
+        if (text === 'G') return { bg: '#fca5a5', color: '#000' }; // 赤
+        if (text === 'H') return { bg: '#cffafe', color: '#000' }; // 水色
+        if (text === 'I') return { bg: '#1e293b', color: '#fff' }; // 黒（文字は白）
+
+        // 軍団の色設定（部分一致でも反応するように inclusions で判定）
+        if (text.includes('赤組') || text.includes('ADG')) return { bg: '#ef4444', color: '#fff' };
+        if (text.includes('青組') || text.includes('BEH')) return { bg: '#3b82f6', color: '#fff' };
+        if (text.includes('黄色組') || text.includes('CFI')) return { bg: '#eab308', color: '#000' };
+
+        // 該当しない場合はデフォルト色
+        return null;
+    }
+
     function showPage(pageId) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.getElementById('page-' + pageId).classList.add('active');
     }
 
-    // 表を作る命令
-    // 表を作る命令（時刻バグ対策版）
+    // 表を作る命令（色分け対応版）
     function createTable(dataArray) {
         if (!dataArray || dataArray.length === 0) return "<p>データがありません</p>";
         let html = '<div style="overflow-x:auto;"><table>';
+        
         dataArray.forEach((row, idx) => {
             html += "<tr>";
             row.forEach(cell => {
-                // 時刻データが「日付形式」で送られてきた場合の対策
                 let displayValue = cell;
+                
+                // 時刻データのバグ対策
                 if (cell instanceof Date || (typeof cell === 'string' && cell.includes('T') && cell.includes('Z'))) {
                     const d = new Date(cell);
-                    // 時と分を取り出して「HH:mm」形式にする
                     const hours = d.getHours().toString().padStart(2, '0');
                     const minutes = d.getMinutes().toString().padStart(2, '0');
                     displayValue = `${hours}:${minutes}`;
                 }
 
-                if (idx === 0) html += `<th>${displayValue || ''}</th>`;
-                else html += `<td>${displayValue === undefined ? '' : displayValue}</td>`;
+                // 1行目のヘッダー処理
+                if (idx === 0) {
+                    const customStyle = getHeaderStyle(displayValue);
+                    if (customStyle) {
+                        // 指定された色を背景と文字に適用
+                        html += `<th style="background: ${customStyle.bg}; color: ${customStyle.color};">${displayValue || ''}</th>`;
+                    } else {
+                        html += `<th class="default-bg">${displayValue || ''}</th>`;
+                    }
+                } else {
+                    html += `<td>${displayValue === undefined ? '' : displayValue}</td>`;
+                }
             });
             html += "</tr>";
         });
@@ -112,7 +147,6 @@
         return html;
     }
 
-    // データを読み込む命令
     async function loadData() {
         try {
             const response = await fetch(GAS_URL);
@@ -121,13 +155,10 @@
             let scoreHtml = "";
             let scheduleHtml = "";
 
-            // スプレッドシート内の各シートを仕分け
             for (let sheetName in allData) {
                 if (sheetName.includes("予定表")) {
-                    // 「予定表」という名前のシートは予定表ページへ
                     scheduleHtml += createTable(allData[sheetName]);
                 } else {
-                    // それ以外のシート（得点など）は得点ページへ
                     scoreHtml += `<h2>${sheetName}</h2>` + createTable(allData[sheetName]);
                 }
             }
@@ -141,9 +172,7 @@
         }
     }
 
-    // 初回読み込み
     loadData();
-    // 2分ごとに自動更新（当日、得点が動くのを反映するため）
     setInterval(loadData, 120000);
 </script>
 
